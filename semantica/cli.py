@@ -4135,8 +4135,6 @@ def export(
             knowledge_graph = {
                 "entities": entities,
                 "relationships": relationships,
-                "nodes": entities,
-                "edges": relationships,
             }
 
             kwargs: Dict[str, Any] = {"format": fmt}

@@ -965,7 +965,15 @@ def export_knowledge_graph(
     elif format in ["yaml", "yml"]:
         export_yaml(knowledge_graph, file_path, **_method_kwargs(), **kwargs)
     elif format in ["owl-xml", "owl"]:
-        export_owl(knowledge_graph, file_path, format=format, **_method_kwargs(), **kwargs)
+        # "owl" is an accepted alias, but export_owl only validates
+        # "owl-xml"/"turtle"; normalize so the alias actually works (#1712).
+        export_owl(
+            knowledge_graph,
+            file_path,
+            format="owl-xml" if format == "owl" else format,
+            **_method_kwargs(),
+            **kwargs,
+        )
     elif format == "cypher":
         export_lpg(knowledge_graph, file_path, **_method_kwargs(), **kwargs)
     elif format in ["neo4j_csv", "neo4j-csv"]:
@@ -974,10 +982,61 @@ def export_knowledge_graph(
         export_neo4j_csv(knowledge_graph, file_path, **_method_kwargs(), **kwargs)
     elif format == "aql":
         export_arango(knowledge_graph, file_path, **_method_kwargs(), **kwargs)
+    elif format == "arrow":
+        export_arrow(knowledge_graph, file_path, **_method_kwargs(), **kwargs)
+    elif format == "arangodb":
+        export_arango(knowledge_graph, file_path, **_method_kwargs(), **kwargs)
+    elif format == "shacl":
+        _export_shacl_from_graph(knowledge_graph, file_path, **kwargs)
+    elif format == "distance-enriched":
+        _export_distance_enriched(knowledge_graph, file_path, **kwargs)
     elif format == "parquet":
         export_parquet(knowledge_graph, file_path, **_method_kwargs(), **kwargs)
     else:
         raise ProcessingError(f"Unknown export format: {format}")
+
+
+def _export_shacl_from_graph(
+    knowledge_graph: Dict[str, Any],
+    file_path: Union[str, Path],
+    **kwargs,
+) -> None:
+    """Export SHACL shapes derived from the knowledge graph (#1712).
+
+    Generates the graph's ontology, lifts it to SHACL shapes, and writes the
+    Turtle serialization to ``file_path``.
+    """
+    try:
+        from ..ontology import OntologyGenerator, SHACLGenerator
+    except ImportError as exc:
+        raise ProcessingError(f"Ontology module not available: {exc}") from exc
+
+    ontology = OntologyGenerator().generate_from_graph(knowledge_graph)
+    generator = SHACLGenerator()
+    shapes = generator.generate(ontology)
+    Path(file_path).write_text(
+        generator.serialize(shapes, format="turtle"), encoding="utf-8"
+    )
+
+
+def _export_distance_enriched(
+    knowledge_graph: Any,
+    file_path: Union[str, Path],
+    **kwargs,
+) -> None:
+    """Export pairwise distance metrics for a ContextGraph (#1712)."""
+    try:
+        from ..context import ContextGraph
+        from .distance_exporter import DistanceExporter
+    except ImportError as exc:
+        raise ProcessingError(f"Required module not available: {exc}") from exc
+
+    if not isinstance(knowledge_graph, ContextGraph):
+        raise ProcessingError(
+            "distance-enriched export requires a ContextGraph instance; "
+            "plain {entities, relationships} dicts are not supported"
+        )
+    DistanceExporter(knowledge_graph).to_csv(str(file_path))
 
 
 def get_export_method(task: str, name: str) -> Optional[Callable]:
