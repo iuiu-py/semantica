@@ -3890,14 +3890,19 @@ class ContextGraph:
         source_decision_id: str,
         target_decision_id: str,
         relationship_type: str
-    ) -> None:
+    ) -> bool:
         """
         Add causal relationship between decisions.
-        
+
         Args:
             source_decision_id: Source decision ID
             target_decision_id: Target decision ID
             relationship_type: Type of relationship (CAUSED, INFLUENCED, PRECEDENT_FOR)
+
+        Returns:
+            True when the edge was added; False when it was skipped because a
+            decision ID is unknown or a node is not a decision (logged as a
+            warning so callers no longer mistake the skip for success).
         """
         # Normalize so callers may use either vocabulary's spelling
         # ("causes" from CausalChainAnalyzer, or "CAUSED" from this module's
@@ -3911,17 +3916,25 @@ class ContextGraph:
         
         # Check if decisions exist - if not, skip adding relationship
         if source_decision_id not in self.nodes or target_decision_id not in self.nodes:
-            return
-        
+            self.logger.warning(
+                "add_causal_relationship skipped: unknown decision id(s) "
+                f"'{source_decision_id}' -> '{target_decision_id}'"
+            )
+            return False
+
         # Check if nodes are decision nodes - if not, skip adding relationship
         source_node = self.nodes[source_decision_id]
         target_node = self.nodes[target_decision_id]
         if (not hasattr(source_node, 'node_type') or not isinstance(source_node.node_type, str) or
             not hasattr(target_node, 'node_type') or not isinstance(target_node.node_type, str) or
-            source_node.node_type.lower() != "decision" or 
+            source_node.node_type.lower() != "decision" or
             target_node.node_type.lower() != "decision"):
-            return
-        
+            self.logger.warning(
+                "add_causal_relationship skipped: nodes are not decision nodes "
+                f"('{source_decision_id}' -> '{target_decision_id}')"
+            )
+            return False
+
         edge = ContextEdge(
             source_id=source_decision_id,
             target_id=target_decision_id,
@@ -3930,6 +3943,7 @@ class ContextGraph:
             metadata={"recorded_at": datetime.utcnow().isoformat()},
         )
         self._add_internal_edge(edge)
+        return True
 
     def get_causal_chain(
         self,
