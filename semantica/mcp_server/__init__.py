@@ -287,9 +287,9 @@ def _tool_get_causal_chain(args: dict) -> dict:
 
 def _tool_link_decisions(args: dict) -> dict:
     """Create a typed causal relationship between two recorded decisions."""
-    source = args.get("source", "").strip()
-    target = args.get("target", "").strip()
-    relationship = args.get("relationship", "").strip()
+    source = str(args.get("source") or "").strip()
+    target = str(args.get("target") or "").strip()
+    relationship = str(args.get("relationship") or "").strip()
     if not source or not target:
         return {"error": "source and target are required"}
     if not relationship:

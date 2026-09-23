@@ -338,3 +338,37 @@ class TestLinkDecisionsEndToEnd(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ── Embedded server: None-argument regression (issue #1653 HIGH finding) ─────
+
+class TestEmbeddedLinkDecisionsNoneArguments(unittest.TestCase):
+    """Verify the embedded handler does not crash when any argument is None.
+
+    JSON null becomes Python None in the args dict.  The handler must return
+    a clean error dict — not raise AttributeError — for each case.
+    """
+
+    def _handler(self):
+        from semantica.mcp_server import TOOLS
+        return next(t["_handler"] for t in TOOLS if t["name"] == "link_decisions")
+
+    def test_none_source_returns_error_not_exception(self):
+        result = self._handler()({"source": None, "target": "dec_t", "relationship": "CAUSED"})
+        self.assertIn("error", result)
+        self.assertNotIn("linked", result)
+
+    def test_none_target_returns_error_not_exception(self):
+        result = self._handler()({"source": "dec_s", "target": None, "relationship": "CAUSED"})
+        self.assertIn("error", result)
+        self.assertNotIn("linked", result)
+
+    def test_none_relationship_returns_error_not_exception(self):
+        result = self._handler()({"source": "dec_s", "target": "dec_t", "relationship": None})
+        self.assertIn("error", result)
+        self.assertNotIn("linked", result)
+
+    def test_all_none_returns_error_not_exception(self):
+        result = self._handler()({"source": None, "target": None, "relationship": None})
+        self.assertIn("error", result)
+        self.assertNotIn("linked", result)
