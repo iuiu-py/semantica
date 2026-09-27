@@ -5294,6 +5294,34 @@ class ContextGraph:
     def _calculate_decision_content_similarity(self, scenario: str, decision: Dict[str, Any]) -> float:
         """Calculate content similarity between scenario and decision.
 
+        Signal hierarchy (applies to both the word and bigram channels):
+
+          PRIMARY   — Jaccard(query, decision.scenario)
+            The scenario field is the authoritative description of what the
+            decision was about.  Scoring against it first means a query that
+            is identical or very close to a stored scenario always scores high,
+            regardless of how long the reasoning or entity list is.
+
+          SECONDARY — 0.8 × Jaccard(query, scenario + reasoning + entities)
+            The full decision text is a useful fallback when the query overlaps
+            with reasoning or entity context rather than the scenario title.
+            The 0.8× discount is intentional: decisions whose scenario is
+            unrelated to the query but whose reasoning happens to restate the
+            query words are ranked lower than genuine scenario-level matches.
+            This also prevents verbose reasoning from diluting exact-scenario
+            queries below any reasonable threshold (#1140).
+
+            Practical consequence: a reasoning-only match scores at most
+            0.8 × full_text_jaccard.  At the find_similar_decisions default
+            threshold of 0.3 (combined_sim = 0.7 × content_sim), the
+            full_text_jaccard must be ≥ 0.54 to survive, compared to ≥ 0.43
+            without the discount.  Callers that depend on reasoning-heavy
+            matching should lower their threshold accordingly.
+
+          FINAL     — max(primary, secondary)
+            The higher of the two signals wins so that neither channel can
+            suppress a strong match from the other.
+
         Uses word-level Jaccard for space-separated languages.  For text where
         whitespace tokenisation is unreliable (CJK/Japanese/Korean scripts, or
         a query with no whitespace at all) a character-bigram Jaccard is
